@@ -1,3 +1,4 @@
+
 /* =====================================
    LECTEUR — MANGA MBOKAL EDITION
    (s'appuie sur les variables de style.css)
@@ -6,6 +7,7 @@
 body.reader-page {
     padding: 0;
     background: #000;
+    height: 100vh;
     height: 100dvh;
     overflow: hidden;
 }
@@ -114,6 +116,7 @@ body.ui-hidden .reader-bottom { transform: translateY(100%); }
 /* ---------- Zone de lecture ---------- */
 
 .stage {
+    height: 100vh;
     height: 100dvh;
     outline: none;
 }
@@ -123,6 +126,7 @@ body.ui-hidden .reader-bottom { transform: translateY(100%); }
     overflow-y: auto;
     overflow-x: hidden;
     -webkit-overflow-scrolling: touch;
+    overscroll-behavior-y: contain;
     scroll-behavior: auto;
 }
 
@@ -164,7 +168,7 @@ body.ui-hidden .reader-bottom { transform: translateY(100%); }
     object-fit: contain;
 }
 
-/* Page de test (tant que les images ne sont pas là) */
+/* Page de test */
 .placeholder {
     width: 100%;
     aspect-ratio: 2 / 3;
@@ -237,20 +241,29 @@ body.ui-hidden .reader-bottom { transform: translateY(100%); }
 
 .end-card h2,
 .empty h2 { font-size: 20px; }
+
 .end-card p,
-.empty p { color: var(--gray); font-size: 13px; line-height: 1.6; }
+.empty p {
+    color: var(--gray);
+    font-size: 13px;
+    line-height: 1.6;
+}
 
 .end-card .primary {
     background: var(--green);
     color: #000;
 }
 
-/* ---------- Panneaux (chapitres, réglages) ---------- */
+/* ---------- Panneaux ---------- */
 
 .sheet { position: fixed; inset: 0; z-index: 100; }
 .sheet[hidden] { display: none; }
 
-.sheet-backdrop { position: absolute; inset: 0; background: rgba(0, 0, 0, 0.6); }
+.sheet-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.6);
+}
 
 .sheet-box {
     position: absolute;
@@ -283,7 +296,12 @@ body.ui-hidden .reader-bottom { transform: translateY(100%); }
 
 .sheet-head h2 { font-size: 16px; }
 
-.chapter-list { list-style: none; display: flex; flex-direction: column; gap: 8px; }
+.chapter-list {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
 
 .chapter-list button {
     width: 100%;
@@ -330,10 +348,16 @@ body.ui-hidden .reader-bottom { transform: translateY(100%); }
 
 /* Réglage de sens inutile en défilement */
 .setting-label.is-off,
-.segmented.is-off { opacity: 0.4; pointer-events: none; }
+.segmented.is-off {
+    opacity: 0.4;
+    pointer-events: none;
+}
 
 @media (prefers-reduced-motion: reduce) {
-    .reader-top, .reader-bottom, .sheet-box { transition: none; animation: none; }
+    .reader-top, .reader-bottom, .sheet-box {
+        transition: none;
+        animation: none;
+    }
 }
 
 /* ---------- Compteur de commentaires ---------- */
@@ -359,14 +383,22 @@ body.ui-hidden .reader-bottom { transform: translateY(100%); }
 
 .badge[hidden] { display: none; }
 
-.chapter-list .talk { font-size: 11px; color: var(--gray); white-space: nowrap; }
+.chapter-list .talk {
+    font-size: 11px;
+    color: var(--gray);
+    white-space: nowrap;
+}
 
 /* Choix de la langue des pages */
 .segmented.wrap { flex-wrap: wrap; }
 .segmented.wrap button { flex: 1 1 30%; }
 
 /* ---------- Light novel ---------- */
-.stage.novel { --novel-size: 17px; }
+
+.stage.novel {
+    --novel-size: 17px;
+}
+
 .stage.novel .novel-text {
     max-width: 680px;
     margin: 0 auto;
@@ -376,12 +408,63 @@ body.ui-hidden .reader-bottom { transform: translateY(100%); }
     line-height: 1.85;
     overflow-wrap: anywhere;
 }
-.stage.novel .novel-text p { margin: 0 0 1.1em; text-align: left; }
-.stage.novel .novel-text h2 { font-size: 1.35em; margin: 1.6em 0 0.8em; line-height: 1.3; }
-.stage.novel .novel-text h3 { font-size: 1.15em; margin: 1.4em 0 0.6em; line-height: 1.3; }
-.stage.novel .novel-sep { text-align: center; margin: 1.8em 0; letter-spacing: 0.4em; opacity: 0.6; }
-.stage.novel[data-theme="sepia"] { background: #f4ecd8; color: #3b2f1e; }
-.stage.novel[data-theme="light"] { background: #fafafa; color: #1b1b1b; }
-.stage.novel[data-theme="dark"] { background: #050c08; color: #e8efe9; }
+
+.stage.novel .novel-text p {
+    margin: 0 0 1.1em;
+    text-align: left;
+}
+
+.stage.novel .novel-text h2 {
+    font-size: 1.35em;
+    margin: 1.6em 0 0.8em;
+    line-height: 1.3;
+}
+
+.stage.novel .novel-text h3 {
+    font-size: 1.15em;
+    margin: 1.4em 0 0.6em;
+    line-height: 1.3;
+}
+
+.stage.novel .novel-sep {
+    text-align: center;
+    margin: 1.8em 0;
+    letter-spacing: 0.4em;
+    opacity: 0.6;
+}
+
+.stage.novel[data-theme="sepia"] {
+    background: #f4ecd8;
+    color: #3b2f1e;
+}
+
+.stage.novel[data-theme="light"] {
+    background: #fafafa;
+    color: #1b1b1b;
+}
+
+.stage.novel[data-theme="dark"] {
+    background: #050c08;
+    color: #e8efe9;
+}
+
 .stage.novel[data-theme="sepia"] .end-card p,
-.stage.novel[data-theme="light"] .end-card p { color: inherit; opacity: 0.75; }
+.stage.novel[data-theme="light"] .end-card p {
+    color: inherit;
+    opacity: 0.75;
+}
+
+/* ---------- Touches mobiles ---------- */
+
+* {
+    -webkit-tap-highlight-color: transparent;
+}
+
+*:focus {
+    outline: none;
+}
+
+a, button {
+    outline: none;
+    -webkit-tap-highlight-color: transparent;
+}

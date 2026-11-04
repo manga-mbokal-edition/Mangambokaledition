@@ -9,13 +9,17 @@
     <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
     <link rel="apple-touch-icon" href="apple-touch-icon.png">
     <link rel="manifest" href="manifest.webmanifest">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="Mbokal">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black">
     <meta name="theme-color" content="#050c08">
     <meta name="description" content="Manga Mbokal Édition : des histoires qui inspirent. Lis des mangas et des bandes dessinées africaines.">
     <meta property="og:type" content="website">
     <meta property="og:site_name" content="Manga Mbokal Édition">
     <meta property="og:title" content="Manga Mbokal Édition">
     <meta property="og:description" content="Des histoires qui inspirent. Lis des mangas et des bandes dessinées africaines.">
-    <meta property="og:image" content="https://www.manga-mbokal.com/og-image.png">
+    <meta property="og:image" content="https://johnsonquatre-alt.github.io/Mangambokaledition/og-image.png">
     <meta name="twitter:card" content="summary_large_image">
 
 
@@ -57,6 +61,7 @@
 
     <!-- CONTENU PRINCIPAL -->
     <main class="main-content">
+<div data-publications data-types="banniere" data-layout="banner" data-limit="5"></div>
         
         <!-- BANNIERE HERO TOP -->
         <section class="hero">
@@ -124,7 +129,8 @@
         </section>
 
         <!-- SECTION ACTUALITÉS -->
-        <section class="content-section">
+        <div data-publications data-types="actualite,annonce,evenement" data-layout="latest" data-title="Actualités" data-icon="fa-newspaper" data-fallback="#home-news" data-limit="3"></div>
+<section id="home-news" class="content-section">
             <div class="identity-bar">
                 <h2><i class="fa-solid fa-newspaper"></i> ACTUALITÉS</h2>
                 <!-- Button Voir tout actualités -->
@@ -165,7 +171,8 @@
         </section>
 
         <!-- SECTION PERSONNAGES -->
-        <section class="content-section">
+        <div data-publications data-types="personnage" data-layout="grid" data-title="Personnages" data-icon="fa-user-group" data-fallback="#home-persos" data-limit="6"></div>
+<section id="home-persos" class="content-section">
             <div class="identity-bar">
                 <h2><i class="fa-solid fa-user-group"></i> PERSONNAGES</h2>
                 <!-- Button Voir tout personnages -->
@@ -246,7 +253,9 @@
 <script src="config.js"></script>
 <script src="mbokal.js"></script>
 <script src="catalogue.js"></script>
+<script src="publications.js"></script>
 <script src="traductions.js"></script>
 <script src="langue.js"></script>
+<script src="app.js"></script>
 </body>
 </html>

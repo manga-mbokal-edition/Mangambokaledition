@@ -157,6 +157,7 @@
         wrap.append(box);
         frag.append(wrap, top.s, chs.s);
         root.replaceChildren(frag);
+        if (window.MbokalPub) MbokalPub.characters(root, m.id);          // personnages de cette œuvre
         refresh();
         Mbokal.onChange(() => { refresh(); });
     }

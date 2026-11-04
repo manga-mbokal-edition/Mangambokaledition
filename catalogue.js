@@ -29,7 +29,7 @@
     function db() {
         if (!dbPromise) {
             dbPromise = new Promise((resolve, reject) => {
-                const r = indexedDB.open("mbokal-atelier", 2);
+                const r = indexedDB.open("mbokal-atelier", 3);
                 r.onupgradeneeded = () => {
                     const d = r.result;
                     const mk = (name, opts) => { if (!d.objectStoreNames.contains(name)) d.createObjectStore(name, opts); };
@@ -37,6 +37,7 @@
                     mk("chapitres", { keyPath: "key" });
                     mk("blobs");
                     mk("illustrations", { keyPath: "id" });
+                    mk("publications", { keyPath: "id" });
                 };
                 r.onsuccess = () => resolve(r.result);
                 r.onerror = () => reject(r.error);
@@ -101,6 +102,23 @@
             return row;
         },
         async deleteIllustration(id) { await idb.del("illustrations", id); },
+        rawPublications: () => idb.all("publications"),
+        async savePublication(p) {
+            const old = p.id ? await idb.get("publications", p.id) : null;
+            const u = Mbokal.user();
+            const row = {
+                id: p.id || "p" + Date.now().toString(36) + rand(),
+                type: p.type, titre: p.titre, resume: p.resume || "", texte: p.texte || "", image: p.image || null,
+                lien: p.lien || "", manga_id: p.manga_id || null, date_evenement: p.date_evenement || null,
+                epingle: !!p.epingle, ordre: Number(p.ordre) || 0, statut: p.statut,
+                auteur: (old && old.auteur) || (u && u.pseudo) || "Équipe",
+                cree_par: (old && old.cree_par) || (u && u.id) || null,
+                created_at: (old && old.created_at) || new Date().toISOString()
+            };
+            await idb.put("publications", row);
+            return row;
+        },
+        async deletePublication(id) { await idb.del("publications", id); },
         saveChapter: c => idb.put("chapitres", Object.assign({ key: c.manga_id + ":" + c.numero }, c)),
         async deleteChapter(mangaId, numero) { await idb.del("chapitres", mangaId + ":" + numero); },
         async upload(mangaId, blob) {
@@ -156,6 +174,17 @@
             return ck(await sbc().from("illustrations").insert(row).select("*").single());
         },
         async deleteIllustration(id) { ck(await sbc().from("illustrations").delete().eq("id", id)); },
+        async rawPublications() { return ck(await sbc().from("publications").select("*").order("created_at", { ascending: false })); },
+        async savePublication(p) {
+            const row = {
+                type: p.type, titre: p.titre, resume: p.resume || "", texte: p.texte || "", image: p.image || null,
+                lien: p.lien || "", manga_id: p.manga_id || null, date_evenement: p.date_evenement || null,
+                epingle: !!p.epingle, ordre: Number(p.ordre) || 0, statut: p.statut
+            };
+            if (p.id) { ck(await sbc().from("publications").update(row).eq("id", p.id)); return Object.assign({ id: p.id }, row); }
+            return ck(await sbc().from("publications").insert(row).select("*").single());
+        },
+        async deletePublication(id) { ck(await sbc().from("publications").delete().eq("id", id)); },
         async deleteManga(id) { ck(await sbc().from("mangas").delete().eq("id", id)); },
         async saveChapter(c) {
             const row = { manga_id: c.manga_id, numero: c.numero, titre: c.titre, pages: c.pages, statut: c.statut,
@@ -350,6 +379,13 @@
                 image: { ref: r.image, url: await d.url(r.image) }
             })));
         },
+        async publications() {
+            const d = driver();
+            const rows = await d.rawPublications();
+            return Promise.all(rows.map(async r => Object.assign({}, r, { image: r.image ? { ref: r.image, url: await d.url(r.image) } : null })));
+        },
+        savePublication: p => driver().savePublication(p),
+        deletePublication: id => driver().deletePublication(id),
         saveIllustration: i => driver().saveIllustration(i),
         deleteIllustration: id => driver().deleteIllustration(id),
         upload: (id, blob, ext) => driver().upload(id, blob, ext),
@@ -370,12 +406,43 @@
         })));
     }
 
-    const Catalog = { ready: null, load, renderCards, illustrations, admin, staticIds: STATIC_IDS };
+    // Publications publiées : actualités, annonces, événements, personnages, bannières
+    async function publications(opts) {
+        opts = opts || {};
+        await Mbokal.ready;
+        const d = driver();
+        if (!d) return [];
+        const rows = (await d.rawPublications())
+            .filter(r => (opts.drafts || r.statut === "publie")
+                && (!opts.types || opts.types.indexOf(r.type) !== -1)
+                && (!opts.manga || r.manga_id === opts.manga));
+        return Promise.all(rows.map(async r => Object.assign({}, r, { url: r.image ? await d.url(r.image) : null })));
+    }
+
+    // Les mangas écrits « en dur » dans les pages (accueil, découvrir, studio) prennent la couverture
+    // envoyée depuis l'atelier : l'identifiant vient du lien « fiche » de la carte.
+    function applyCovers() {
+        document.querySelectorAll(".manga-card").forEach(card => {
+            if (card.dataset.dynamic) return;
+            const a = card.querySelector('a.cover-link[href*="id="]');
+            const cover = card.querySelector(".cover");
+            if (!a || !cover) return;
+            const id = new URL(a.href, location.href).searchParams.get("id");
+            const m = window.MANGAS.find(x => x.id === id);
+            if (!m || !m.couverture) return;
+            cover.style.backgroundImage = "url(\"" + m.couverture.replace(/"/g, "%22") + "\")";
+            cover.style.backgroundSize = "cover";
+            cover.style.backgroundPosition = "center";
+            cover.classList.add("has-image");
+        });
+    }
+
+    const Catalog = { ready: null, load, renderCards, applyCovers, illustrations, publications, admin, staticIds: STATIC_IDS };
     window.Catalog = Catalog;
 
     // Chargement automatique, puis cartes dynamiques sur les pages qui les prévoient
     Catalog.ready = load().then(() => {
-        const fill = () => document.querySelectorAll("[data-catalog]").forEach(renderCards);
+        const fill = () => { document.querySelectorAll("[data-catalog]").forEach(renderCards); applyCovers(); };
         if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", fill);
         else fill();
     });

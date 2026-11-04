@@ -115,3 +115,84 @@ html.lg-busy .lg-spin { display: block; }
     .lg-box { animation: none; }
     .lg-spin { animation-duration: 2s; }
 }
+
+/* =====================================
+   APPLICATION : bannière d'installation, messages
+===================================== */
+.app-banner {
+    position: fixed;
+    left: 12px;
+    right: 12px;
+    bottom: calc(92px + env(safe-area-inset-bottom, 0px));
+    z-index: 8000;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    max-width: 520px;
+    margin: 0 auto;
+    padding: 12px 14px;
+    border-radius: 16px;
+    background: #0b1a12;
+    border: 1px solid var(--green, #00ff88);
+    color: #fff;
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+.app-banner-text { flex: 1; }
+
+.app-banner-go {
+    padding: 9px 14px;
+    border: 0;
+    border-radius: 10px;
+    background: var(--green, #00ff88);
+    color: #000;
+    font-weight: bold;
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.app-banner-x {
+    width: 34px;
+    height: 34px;
+    border: 0;
+    border-radius: 10px;
+    background: transparent;
+    color: var(--gray, #9aa7a0);
+    font-size: 15px;
+    cursor: pointer;
+}
+
+.app-banner-go:focus-visible,
+.app-banner-x:focus-visible { outline: 2px solid var(--green, #00ff88); outline-offset: 2px; }
+
+.app-toast {
+    position: fixed;
+    left: 50%;
+    bottom: calc(92px + env(safe-area-inset-bottom, 0px));
+    transform: translateX(-50%);
+    z-index: 8100;
+    width: max-content;
+    max-width: calc(100% - 32px);
+    padding: 12px 16px;
+    border-radius: 14px;
+    background: #0b1a12;
+    border: 1px solid var(--green, #00ff88);
+    color: #fff;
+    font-size: 12px;
+    line-height: 1.5;
+    text-align: center;
+}
+
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+*:focus {
+  outline: none;
+}
+
+a, button {
+  outline: none;
+  -webkit-tap-highlight-color: transparent;
+}

@@ -15,7 +15,7 @@
     const MAX_HEIGHT = 12000;         // au-delà, certains téléphones ne savent pas traiter l'image
     const MAX_FILE = 25 * 1024 * 1024;
 
-    const state = { view: "list", mangaId: null, numero: null, mangas: [], chapters: [], pageLang: "fr", illusId: null, illus: [] };
+    const state = { view: "list", mangaId: null, numero: null, mangas: [], chapters: [], pageLang: "fr", illusId: null, illus: [], pubId: null, pubPreset: null, pubBack: null, flush: null };
     const TYPES = [["manga", "Manga"], ["novel", "Light novel"]];
     const typeLabel = t => (t === "novel" ? "Light novel" : "Manga");
     const LANGS = [["fr", "Français"], ["en", "English"], ["pt", "Português"], ["sw", "Kiswahili"], ["ln", "Lingála"]];
@@ -49,7 +49,10 @@
         const m = String(ex && ex.message || "").toLowerCase();
         if (m.includes("row-level") || m.includes("permission") || m.includes("not authorized")) return "Action refusée : ton compte ne fait pas partie de l'équipe.";
         if (m.includes("duplicate") || m.includes("already exists")) return "Cet élément existe déjà.";
-        return "L'opération a échoué. Vérifie ta connexion et réessaie.";
+        if (m.includes("publications") && (m.includes("does not exist") || m.includes("schema cache"))) return "La table des publications n'existe pas encore dans Supabase : lance d'abord l'étape SQL « publications ».";
+        if (m.includes("texte") && (m.includes("column") || m.includes("schema cache"))) return "La colonne « texte » manque dans Supabase : lance l'étape SQL des light novels.";
+        const detail = String((ex && (ex.message || ex.details)) || "").slice(0, 140);
+        return "L'opération a échoué" + (detail ? " (" + detail + ")" : "") + ". Vérifie ta connexion et réessaie.";
     }
 
     function section(iconClass, title) {
@@ -134,9 +137,11 @@
 
     /* ---------- Navigation ---------- */
     function go(view, mangaId, numero) {
+        if (state.flush) { const f = state.flush; state.flush = null; f(); }       // un texte non enregistré est envoyé avant de quitter
         if (view !== "chapter" || numero !== state.numero) state.pageLang = "fr";
         state.view = view; state.mangaId = mangaId || null; state.numero = numero || null;
         if (view === "illustration") state.illusId = mangaId || null;      // pour cette vue, le 2e argument est l'illustration
+        if (view === "publication") state.pubId = mangaId || null;         // idem : la publication
         render();
         window.scrollTo(0, 0);
     }
@@ -144,9 +149,10 @@
     function setBack() {
         if (state.view === "list") { backTop.onclick = null; backTop.href = "compte.html"; backTop.lastChild.textContent = " Mon compte"; return; }
         backTop.href = "#";
-        const toList = state.view === "manga" || state.view === "illustration";
-        backTop.lastChild.textContent = state.view === "manga" ? " Toutes les œuvres" : state.view === "illustration" ? " Retour à l'atelier" : " Retour à l'œuvre";
-        backTop.onclick = e => { e.preventDefault(); toList ? go("list") : go("manga", state.mangaId); };
+        const fromWork = state.view === "publication" && state.pubBack;                 // personnage ouvert depuis une œuvre
+        const toList = !fromWork && (state.view === "manga" || state.view === "illustration" || state.view === "publication");
+        backTop.lastChild.textContent = fromWork ? " Retour à l'œuvre" : state.view === "manga" ? " Toutes les œuvres" : toList ? " Retour à l'atelier" : " Retour à l'œuvre";
+        backTop.onclick = e => { e.preventDefault(); if (fromWork) go("manga", state.pubBack); else toList ? go("list") : go("manga", state.mangaId); };
     }
 
     /* ---------- Accès refusé ---------- */
@@ -237,6 +243,35 @@
         addIl.style.marginTop = "14px";
         il.box.append(addIl);
         frag.append(il.s);
+
+        /* Publications : actualités, annonces, événements, bannières, personnages */
+        let pubs = [];
+        let pubError = "";
+        try { pubs = await Catalog.admin.publications(); } catch (e) { pubError = errMsg(e); }
+        const pb = section("fa-newspaper", "PUBLICATIONS");
+        if (pubError) {
+            pb.box.append(el("p", "auth-error", pubError));
+        } else if (!pubs.length) {
+            pb.box.append(el("p", "empty-note", "Aucune publication pour l'instant."));
+        } else {
+            const ul = el("ul", "row-list");
+            pubs.forEach(p => {
+                const li = el("li");
+                const text = el("div", "row-text");
+                const line = el("span");
+                line.append(el("span", "badge-state" + (p.statut === "publie" ? " pub" : ""), p.statut === "publie" ? "Publiée" : "Brouillon"), " " + pubTypeLabel(p.type));
+                text.append(el("strong", null, p.titre), line);
+                const open = button("row-action", "Modifier", () => { state.pubBack = null; state.pubPreset = null; go("publication", p.id); });
+                open.setAttribute("aria-label", "Modifier " + p.titre);
+                li.append(text, open);
+                ul.append(li);
+            });
+            pb.box.append(ul);
+        }
+        const addPb = button("btn-soft", "Ajouter une publication", () => { state.pubBack = null; state.pubPreset = null; go("publication"); });
+        addPb.style.marginTop = "14px";
+        pb.box.append(addPb);
+        frag.append(pb.s);
 
         if (Mbokal.mode === "local") frag.append(demoNote());
         return frag;
@@ -361,6 +396,32 @@
         frag.append(chs.s);
 
         /* Suppression du manga */
+        /* Personnages de cette œuvre */
+        let chars = [];
+        try { chars = (await Catalog.admin.publications()).filter(p => p.type === "personnage" && p.manga_id === m.id); } catch (e) { chars = []; }
+        const pc = section("fa-user-group", "PERSONNAGES");
+        if (!chars.length) {
+            pc.box.append(el("p", "empty-note", "Aucun personnage pour cette œuvre. Ajoute-les avec leur image."));
+        } else {
+            const ul = el("ul", "row-list");
+            chars.forEach(p => {
+                const li = el("li");
+                const text = el("div", "row-text");
+                const line = el("span");
+                line.append(el("span", "badge-state" + (p.statut === "publie" ? " pub" : ""), p.statut === "publie" ? "Publié" : "Brouillon"), p.resume ? " " + p.resume : "");
+                text.append(el("strong", null, p.titre), line);
+                const open = button("row-action", "Modifier", () => { state.pubBack = m.id; state.pubPreset = null; go("publication", p.id); });
+                open.setAttribute("aria-label", "Modifier " + p.titre);
+                li.append(text, open);
+                ul.append(li);
+            });
+            pc.box.append(ul);
+        }
+        const addPc = button("btn-soft", "Ajouter un personnage", () => { state.pubBack = m.id; state.pubPreset = { type: "personnage", manga_id: m.id }; go("publication"); });
+        addPc.style.marginTop = "14px";
+        pc.box.append(addPc);
+        frag.append(pc.s);
+
         const dz = section("fa-triangle-exclamation", "SUPPRIMER");
         dz.box.append(el("p", "empty-note", "Supprime le manga, tous ses chapitres et toutes leurs images. Impossible à annuler."));
         const del = el("button", "btn-danger", "Supprimer ce manga");
@@ -595,24 +656,34 @@
         const paintWords = () => { const w = words(); wordsLabel.textContent = w + (w > 1 ? " mots" : " mot"); };
         paintWords();
 
-        let timer = null, saving = false, dirty = false;
+        let timer = null, saving = false, dirty = false, unsaved = false;
+        const hhmm = () => new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
         const save = async () => {
             if (saving) { dirty = true; return; }
             saving = true; dirty = false;
-            try { await persist(); status.textContent = "Enregistré"; }
+            try { await persist(); unsaved = dirty; status.textContent = "Enregistré à " + hhmm() + " · " + words() + (words() > 1 ? " mots" : " mot"); }
             catch (ex) { status.textContent = "Non enregistré : " + errMsg(ex); }
             saving = false;
             if (dirty) save();
         };
+        // Le texte est envoyé aussi quand on quitte le champ, change d'application ou ferme la page
+        const flush = () => { clearTimeout(timer); if (unsaved) return save(); };
+        state.flush = flush;
+        document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") flush(); });
+        window.addEventListener("pagehide", flush);
+        window.addEventListener("beforeunload", e => { if (unsaved) { e.preventDefault(); e.returnValue = ""; } });
         area.addEventListener("input", () => {
             ch.texte = area.value;
+            unsaved = true;
             paintWords();
             status.textContent = "Modifications non enregistrées…";
             clearTimeout(timer);
             timer = setTimeout(save, 1800);              // enregistrement automatique
             if (preview.style.display !== "none") MbokalTexte.render(preview, ch.texte);
         });
-        const saveBtn = button("btn-main", "Enregistrer maintenant", () => { clearTimeout(timer); save(); });
+        area.addEventListener("blur", flush);
+        area.addEventListener("change", flush);
+        const saveBtn = button("btn-main", "Enregistrer maintenant", () => { clearTimeout(timer); unsaved = true; save(); });
         saveBtn.style.marginTop = "12px";
 
         const preview = el("div", "novel-text");
@@ -763,6 +834,165 @@
         return frag;
     }
 
+
+    /* ---------- Une publication (actualité, annonce, événement, bannière, personnage) ---------- */
+    const PUB_TYPES = [["actualite", "Actualité"], ["annonce", "Annonce"], ["evenement", "Événement"], ["personnage", "Personnage d'une œuvre"], ["banniere", "Bannière de l'accueil"]];
+    const pubTypeLabel = t => (PUB_TYPES.find(x => x[0] === t) || [t, t])[1];
+    const LINK_OK = /^(https:\/\/\S+|[a-z0-9_.-]+\.html(\?[a-zA-Z0-9=&%._-]*)?)$/;
+
+    function checkbox(label, id, checked) {
+        const wrap = el("label", null);
+        wrap.style.cssText = "display:flex;align-items:center;gap:10px;margin-bottom:15px;color:var(--white);font-size:13px;";
+        const c = el("input");
+        c.type = "checkbox"; c.id = id; c.checked = !!checked;
+        c.style.cssText = "width:20px;height:20px;accent-color:#00ff88;";
+        wrap.append(c, label);
+        return { wrap, c };
+    }
+
+    async function publicationView() {
+        const [mangas, all] = await Promise.all([Catalog.admin.mangas(), Catalog.admin.publications()]);
+        const cur = state.pubId ? all.find(x => x.id === state.pubId) : null;
+        if (state.pubId && !cur) { go("list"); return document.createDocumentFragment(); }
+        const preset = state.pubPreset || {};
+        intro.textContent = cur ? cur.titre : "Nouvelle publication";
+        const frag = document.createDocumentFragment();
+        const box = section("fa-newspaper", cur ? "MODIFIER LA PUBLICATION" : "NOUVELLE PUBLICATION");
+
+        const form = el("form", "at-form");
+        const ty = select("Type", "pb-type", PUB_TYPES, cur ? cur.type : (preset.type || "actualite"));
+        const t = input("Titre", "pb-titre", { value: cur ? cur.titre : "", max: 100 });
+        const rs = textarea("Résumé", "pb-resume", cur ? cur.resume : "", 300);
+        const tx = textarea("Texte", "pb-texte", cur ? cur.texte : "", 8000);
+        tx.t.rows = 8;
+        const mg = select("Lié à une œuvre", "pb-manga", [["", "Aucune"]].concat(mangas.map(x => [x.id, x.titre])), cur && cur.manga_id ? cur.manga_id : (preset.manga_id || ""));
+        const lk = input("Lien (facultatif : https://… ou une page du site, ex. top.html)", "pb-lien", { value: cur ? cur.lien : "", max: 300, required: false });
+        const dt = input("Date de l'événement", "pb-date", { type: "date", value: cur && cur.date_evenement ? cur.date_evenement : "", required: false });
+        const od = input("Ordre d'affichage (1 = en premier)", "pb-ordre", { type: "number", value: cur ? cur.ordre : 0, required: false });
+        const pin = checkbox("Épingler en haut de la liste", "pb-epingle", cur && cur.epingle);
+
+        // image
+        let picked = null;
+        const thumb = el("img");
+        thumb.alt = "";
+        thumb.style.cssText = "display:" + (cur && cur.image ? "block" : "none") + ";width:100%;max-height:320px;object-fit:contain;border-radius:12px;margin-bottom:14px;background:#050c08;";
+        if (cur && cur.image) thumb.src = cur.image.url || "";
+        const pick = el("label", "btn-soft file-pick");
+        const pickLabel = el("span", null, cur && cur.image ? "Remplacer l'image" : "Choisir l'image");
+        pick.append(pickLabel);
+        const file = el("input");
+        file.type = "file"; file.accept = "image/png,image/jpeg,image/webp";
+        file.setAttribute("aria-label", "Choisir une image");
+        pick.append(file);
+        file.addEventListener("change", () => {
+            picked = file.files[0] || null;
+            if (picked) { thumb.src = URL.createObjectURL(picked); thumb.style.display = "block"; }
+        });
+        const imgBlock = el("div");
+        imgBlock.append(thumb, pick, el("p", "at-hint", "L'image est réduite et convertie automatiquement. Elle apparaît dans les listes et en grand sur la page."));
+        imgBlock.style.marginBottom = "16px";
+
+        const err = el("p", "auth-error");
+        err.setAttribute("role", "alert");
+        const save = el("button", "btn-main", "Enregistrer");
+        save.type = "submit";
+
+        const wrapGroup = f => { const d = el("div"); d.append(f); return d; };
+        const g = { tx: wrapGroup(tx.frag), rs: wrapGroup(rs.frag), mg: wrapGroup(mg.frag), lk: wrapGroup(lk.frag), dt: wrapGroup(dt.frag), od: wrapGroup(od.frag), pin: pin.wrap };
+        form.append(ty.frag, t.frag, g.rs, g.tx, imgBlock, g.mg, g.lk, g.dt, g.od, g.pin, err, save);
+
+        function sync() {
+            const k = ty.s.value;
+            const person = k === "personnage", ban = k === "banniere", ev = k === "evenement", news = k === "actualite" || k === "annonce";
+            form.querySelector('label[for="pb-titre"]').textContent = person ? "Nom du personnage" : "Titre";
+            form.querySelector('label[for="pb-resume"]').textContent = person ? "Rôle (ex. Protagoniste, Rival)" : ban ? "Sous-titre" : "Résumé";
+            form.querySelector('label[for="pb-texte"]').textContent = person ? "Présentation du personnage" : "Texte";
+            form.querySelector('label[for="pb-manga"]').textContent = person ? "Œuvre de ce personnage" : "Lié à une œuvre (facultatif)";
+            g.tx.style.display = ban ? "none" : "";
+            g.lk.style.display = person ? "none" : "";
+            g.dt.style.display = ev ? "" : "none";
+            g.od.style.display = (ban || person) ? "" : "none";
+            g.pin.style.display = news ? "" : "none";
+        }
+        ty.s.addEventListener("change", sync);
+        sync();
+
+        async function store(statut) {
+            err.textContent = "";
+            const kind = ty.s.value;
+            const title = t.i.value.trim();
+            if (!title) { err.textContent = "Donne un titre."; return; }
+            if (kind === "personnage" && !mg.s.value) { err.textContent = "Choisis l'œuvre de ce personnage."; return; }
+            if ((kind === "banniere") && !picked && !(cur && cur.image)) { err.textContent = "Une bannière a besoin d'une image."; return; }
+            const link = lk.i.value.trim();
+            if (kind !== "personnage" && link && !LINK_OK.test(link)) { err.textContent = "Le lien doit commencer par https:// ou être une page du site (ex. top.html)."; return; }
+            save.disabled = true;
+            let uploaded = null;
+            try {
+                let ref = cur && cur.image ? cur.image.ref : null;
+                if (picked) {
+                    const { blob, ext } = await prepare(picked, 1600);
+                    uploaded = await Catalog.admin.upload("publications", blob, ext);
+                    ref = uploaded;
+                }
+                await Catalog.admin.savePublication({
+                    id: cur ? cur.id : undefined, type: kind, titre: title, resume: rs.t.value.trim(),
+                    texte: kind === "banniere" ? "" : tx.t.value.trim(), image: ref,
+                    lien: kind === "personnage" ? "" : link, manga_id: mg.s.value || null,
+                    date_evenement: kind === "evenement" && dt.i.value ? dt.i.value : null,
+                    epingle: pin.c.checked && (kind === "actualite" || kind === "annonce"),
+                    ordre: od.i.value, statut
+                });
+                if (picked && cur && cur.image) Catalog.admin.removeFiles([cur.image.ref]).catch(() => {});
+                toast(statut === "publie" ? "Publié" : "Enregistré");
+                state.pubPreset = null;
+                if (state.pubBack) go("manga", state.pubBack); else go("list");
+            } catch (ex) {
+                if (uploaded) Catalog.admin.removeFiles([uploaded]).catch(() => {});
+                err.textContent = errMsg(ex);
+                save.disabled = false;
+            }
+        }
+        form.addEventListener("submit", e => { e.preventDefault(); store(cur ? cur.statut : "brouillon"); });
+        box.box.append(form);
+        frag.append(box.s);
+
+        const pub = section("fa-paper-plane", "PUBLICATION");
+        pub.box.append(el("p", "empty-note", cur && cur.statut === "publie"
+            ? "Cette publication est visible par tous les lecteurs."
+            : "Brouillon : seule l'équipe la voit. Publie-la pour l'afficher sur le site."));
+        const acts = el("div", "at-actions");
+        if (cur) {
+            const prev = el("a", "btn-soft", "Aperçu");
+            prev.href = "publication.html?id=" + encodeURIComponent(cur.id) + "&apercu=1";
+            prev.target = "_blank"; prev.rel = "noopener";
+            prev.style.display = "block";
+            acts.append(prev);
+        }
+        acts.append(button("btn-main", cur && cur.statut === "publie" ? "Repasser en brouillon" : "Publier", () => store(cur && cur.statut === "publie" ? "brouillon" : "publie")));
+        pub.box.append(acts);
+        frag.append(pub.s);
+
+        if (cur) {
+            const dz = section("fa-triangle-exclamation", "SUPPRIMER");
+            const del = el("button", "btn-danger", "Supprimer cette publication");
+            del.type = "button";
+            del.addEventListener("click", async () => {
+                if (!confirm("Supprimer « " + cur.titre + " » ? Cette action est définitive.")) return;
+                del.disabled = true;
+                try {
+                    await Catalog.admin.deletePublication(cur.id);
+                    if (cur.image) Catalog.admin.removeFiles([cur.image.ref]).catch(() => {});
+                    toast("Publication supprimée");
+                    if (state.pubBack) go("manga", state.pubBack); else go("list");
+                } catch (ex) { toast(errMsg(ex)); del.disabled = false; }
+            });
+            dz.box.append(del);
+            frag.append(dz.s);
+        }
+        return frag;
+    }
+
     /* ---------- Rendu ---------- */
     async function render() {
         const mine = ++token;
@@ -779,6 +1009,7 @@
                 frag = state.view === "manga" ? await mangaView()
                     : state.view === "chapter" ? await chapterView()
                     : state.view === "illustration" ? await illustrationView()
+                    : state.view === "publication" ? await publicationView()
                     : await listView();
                 if (state.view === "list" && frag.nodeType) { /* déjà un fragment */ }
             }
@@ -791,6 +1022,16 @@
         root.replaceChildren(wrap);
     }
 
-    Mbokal.onChange(() => { state.view = "list"; render(); });
+    // Supabase annonce parfois « connecté » quand on revient sur l'onglet : on ne recharge l'atelier
+    // que si la personne connectée change vraiment (sinon un texte en cours de saisie serait perdu).
+    let lastUser;
+    Mbokal.ready.then(() => { lastUser = (Mbokal.user() || {}).id || null; });
+    Mbokal.onChange(u => {
+        const id = (u && u.id) || null;
+        if (lastUser === undefined || id === lastUser) return;
+        lastUser = id;
+        state.view = "list";
+        render();
+    });
     render();
 })();

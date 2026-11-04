@@ -1693,3 +1693,16 @@ color: #000;
     height: auto;
     display: block;
 }
+
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+*:focus {
+  outline: none;
+}
+
+a, button {
+  outline: none;
+  -webkit-tap-highlight-color: transparent;
+}
